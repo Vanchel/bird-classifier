@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Bird Classifier</string>
+    <string name="picture_button">Take a picture</string>
+    <string name="prompt">Take a photo of the bird to see what species it belongs to.</string>
+    <string name="permissions_not_granted">Permissions not granted by the user.</string>
+    <string name="processed_image">Processed image</string>
+    <string name="results">Results</string>
+</resources>
