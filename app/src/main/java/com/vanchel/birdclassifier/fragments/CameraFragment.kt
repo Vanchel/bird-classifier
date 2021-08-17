@@ -18,36 +18,65 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.databinding.DataBindingUtil
+import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import com.google.android.material.snackbar.Snackbar
 import com.vanchel.birdclassifier.R
+import com.vanchel.birdclassifier.databinding.FragmentCameraBinding
+import com.vanchel.birdclassifier.viewmodels.CameraViewModel
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-private const val TAG = "CameraXBasic"
-private const val FILENAME_FORMAT = "buff.jpg"
+private const val TAG = "CameraFragment"
+private const val FILENAME = "buff.jpg"
 
 class CameraFragment : Fragment() {
+    private val viewModel: CameraViewModel by viewModels()
+
     private var imageCapture: ImageCapture? = null
+
+    private lateinit var outputDirectory: File
+    private lateinit var cameraExecutor: ExecutorService
 
     private val requestPermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
             if (isGranted) {
-                Log.i(TAG, "Permission granted")
-                // hide rationale and start camera
-                rationaleView.visibility = View.GONE
-                startCamera(previewView.surfaceProvider)
-                pictureButton.isEnabled = true
+                viewModel.onPermissionGranted()
             } else {
-                Log.i(TAG, "Permission denied")
-                rationaleView.visibility = View.VISIBLE
-                pictureButton.isEnabled = false
+                viewModel.onPermissionDenied()
+            }
+        }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        outputDirectory = getOutputDirectory()
+        cameraExecutor = Executors.newSingleThreadExecutor()
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val binding = FragmentCameraBinding.inflate(inflater, container, false).apply {
+            lifecycleOwner = viewLifecycleOwner
+            viewModel = this@CameraFragment.viewModel
+
+            pictureButton.setOnClickListener { takePhoto() }
+            rationaleView.permissionButton.setOnClickListener {
+                requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        }
+
+        viewModel.isPermissionGranted.observe(viewLifecycleOwner) { isGranted: Boolean ->
+            if (isGranted) {
+                startCamera(binding.previewView.surfaceProvider)
+            } else {
                 Snackbar.make(
                     requireActivity().findViewById(android.R.id.content),
                     getString(R.string.permissions_not_granted),
@@ -55,52 +84,12 @@ class CameraFragment : Fragment() {
                 ).show()
             }
         }
-
-    private lateinit var outputDirectory: File
-    private lateinit var cameraExecutor: ExecutorService
-
-    private lateinit var pictureButton: Button
-    private lateinit var previewView: PreviewView
-    private lateinit var rationaleView: LinearLayout
-    private lateinit var permissionButton: Button
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        outputDirectory = getOutputDirectory()
-
-        cameraExecutor = Executors.newSingleThreadExecutor()
-    }
-
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_camera, container, false)
+        return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-        pictureButton = view.findViewById(R.id.picture_button)
-        previewView = view.findViewById(R.id.previewView)
-        rationaleView = view.findViewById(R.id.rationale_view)
-        permissionButton = view.findViewById(R.id.permission_button)
-
-        permissionButton.setOnClickListener {
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-
-        pictureButton.setOnClickListener { takePhoto() }
-
         requestCameraPermission()
-//        if (allPermissionsGranted()) {
-//            startCamera(previewView.surfaceProvider)
-//        } else {
-//            ActivityCompat.requestPermissions(
-//                requireActivity(), REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
-//            )
-//        }
     }
 
     override fun onDestroy() {
@@ -108,53 +97,21 @@ class CameraFragment : Fragment() {
         cameraExecutor.shutdown()
     }
 
-//    override fun onRequestPermissionsResult(
-//        requestCode: Int, permissions: Array<String>, grantResults: IntArray
-//    ) {
-//        Log.d(TAG, "Here we are after getting the permission. Having fun with the girls :P")
-//        if (requestCode == REQUEST_CODE_PERMISSIONS) {
-//            if (allPermissionsGranted()) {
-//                startCamera(previewView.surfaceProvider)
-//            } else {
-//                Snackbar.make(
-//                    requireView(),
-//                    getString(R.string.permissions_not_granted),
-//                    Snackbar.LENGTH_SHORT
-//                ).show()
-//            }
-//        }
-//    }
-
     private fun requestCameraPermission() {
         when {
             ContextCompat.checkSelfPermission(
                 requireContext(),
                 Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED -> {
-                // permission is granted, use camera
-                rationaleView.visibility = View.GONE
-                startCamera(previewView.surfaceProvider)
-                pictureButton.isEnabled = true
+                viewModel.onPermissionGranted()
             }
             ActivityCompat.shouldShowRequestPermissionRationale(
                 requireActivity(),
                 Manifest.permission.CAMERA
             ) -> {
-                // additional rationale should be displayed, show fancy snack bar with launch action
-                rationaleView.visibility = View.VISIBLE
-                pictureButton.isEnabled = false
-
-                Snackbar.make(
-                    requireActivity().findViewById(android.R.id.content),
-                    getString(R.string.permissions_not_granted),
-                    Snackbar.LENGTH_SHORT
-                ).show()
+                viewModel.onPermissionDenied()
             }
             else -> {
-                // permission has not been asked yet, just ask, she won't byte
-                rationaleView.visibility = View.VISIBLE
-                pictureButton.isEnabled = false
-
                 requestPermissionLauncher.launch(Manifest.permission.CAMERA)
             }
         }
@@ -164,7 +121,7 @@ class CameraFragment : Fragment() {
         Log.i(TAG, if (imageCapture != null) "ok" else "not good")
         val imageCapture = imageCapture ?: return
 
-        val photoFile = File(outputDirectory, FILENAME_FORMAT)
+        val photoFile = File(outputDirectory, FILENAME)
 
         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
@@ -193,14 +150,11 @@ class CameraFragment : Fragment() {
         cameraProviderFuture.addListener({
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
 
-            val preview = Preview.Builder()
-                .build()
-                .also {
-                    it.setSurfaceProvider(provider)
-                }
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(provider)
+            }
 
-            imageCapture = ImageCapture.Builder()
-                .build()
+            imageCapture = ImageCapture.Builder().build()
 
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
@@ -216,12 +170,6 @@ class CameraFragment : Fragment() {
 
         }, ContextCompat.getMainExecutor(requireContext()))
     }
-
-//    private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
-//        ContextCompat.checkSelfPermission(
-//            requireActivity().baseContext, it
-//        ) == PackageManager.PERMISSION_GRANTED
-//    }
 
     private fun getOutputDirectory(): File {
         val mediaDir = requireActivity().externalMediaDirs.firstOrNull()?.let {
