@@ -15,4 +15,5 @@
     <string name="confidence_level_high">Высокая</string>
     <string name="confidence_level_very_high">Очень высокая</string>
     <string name="unclear_result">Не удалось определить конкретный вид птицы на фото, пожалуйста, попробуйте еще раз.</string>
+    <string name="choose_from_gallery">Выбрать из галереи</string>
 </resources>
