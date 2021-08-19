@@ -8,4 +8,10 @@
     <string name="rationale_hint">The app needs permission to use the camera to work.</string>
     <string name="permission_button_text">Grant permission</string>
     <string name="camera_image">Camera image</string>
+    <string name="assumption">Perhaps the photo shows: %1$s.\nConfidence level: %2$s.</string>
+    <string name="confidence_level_low">Low</string>
+    <string name="confidence_level_medium">Medium</string>
+    <string name="confidence_level_high">High</string>
+    <string name="confidence_level_very_high">Very high</string>
+    <string name="unclear_result">Could not pinpoint the exact type of bird in the photo, please try again.</string>
 </resources>
