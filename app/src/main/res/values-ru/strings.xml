@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Классификатор птиц</string>
+    <string name="picture_button">Сделать фото</string>
+    <string name="prompt">Сфотографируйте птицу, чтобы узнать, к какому виду она принадлежит.</string>
+    <string name="permissions_not_granted">Разрешение не предоставлено пользователем.</string>
+    <string name="processed_image">Обработанное фото</string>
+    <string name="results">Результаты</string>
+    <string name="rationale_hint">Приложению нужно разрешение на использование камеры для работы.</string>
+    <string name="permission_button_text">Предоставить разрешение</string>
+    <string name="camera_image">Изображение камеры</string>
+    <string name="assumption">Вероятно на фото: %1$s.\nСтепень уверенности: %2$s.</string>
+    <string name="confidence_level_low">Низкая</string>
+    <string name="confidence_level_medium">Средняя</string>
+    <string name="confidence_level_high">Высокая</string>
+    <string name="confidence_level_very_high">Очень высокая</string>
+    <string name="unclear_result">Не удалось определить конкретный вид птицы на фото, пожалуйста, попробуйте еще раз.</string>
+</resources>
