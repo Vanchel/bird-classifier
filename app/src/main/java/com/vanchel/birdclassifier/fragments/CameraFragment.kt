@@ -71,12 +71,6 @@ class CameraFragment : Fragment() {
         viewModel.isPermissionGranted.observe(viewLifecycleOwner) { isGranted: Boolean ->
             if (isGranted) {
                 startCamera()
-            } else {
-                Snackbar.make(
-                    requireActivity().findViewById(android.R.id.content),
-                    getString(R.string.permissions_not_granted),
-                    Snackbar.LENGTH_SHORT
-                ).show()
             }
         }
 
