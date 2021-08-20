@@ -1,10 +1,11 @@
 package com.vanchel.birdclassifier.fragments
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
+import android.util.Size
 import android.view.*
 import androidx.fragment.app.Fragment
 import androidx.activity.result.contract.ActivityResultContracts.GetContent
@@ -21,18 +22,18 @@ import com.vanchel.birdclassifier.databinding.FragmentCameraBinding
 import com.vanchel.birdclassifier.viewmodels.CameraViewModel
 import java.io.File
 import java.util.*
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 private const val FILENAME = "buff.jpg"
 
 class CameraFragment : Fragment() {
+    private var binding: FragmentCameraBinding? = null
+
     private val viewModel: CameraViewModel by viewModels()
 
     private var imageCapture: ImageCapture? = null
 
     private lateinit var outputDirectory: File
-    private lateinit var cameraExecutor: ExecutorService
 
     private val requestPermissionLauncher =
         registerForActivityResult(RequestPermission()) { isGranted: Boolean ->
@@ -45,25 +46,19 @@ class CameraFragment : Fragment() {
 
     private val getContentLauncher =
         registerForActivityResult(GetContent()) { uri: Uri? ->
-            uri?.let {
-                findNavController().navigate(
-                    CameraFragmentDirections.actionCameraFragmentToResultFragment(it)
-                )
-            }
+            uri?.let(::goToResults)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setHasOptionsMenu(true)
-        outputDirectory = getOutputDirectory()
-        cameraExecutor = Executors.newSingleThreadExecutor()
     }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View {
-        val binding = FragmentCameraBinding.inflate(inflater, container, false).apply {
+    ): View? {
+        binding = FragmentCameraBinding.inflate(inflater, container, false).apply {
             lifecycleOwner = viewLifecycleOwner
             viewModel = this@CameraFragment.viewModel
 
@@ -75,7 +70,7 @@ class CameraFragment : Fragment() {
 
         viewModel.isPermissionGranted.observe(viewLifecycleOwner) { isGranted: Boolean ->
             if (isGranted) {
-                startCamera(binding.previewView.surfaceProvider)
+                startCamera()
             } else {
                 Snackbar.make(
                     requireActivity().findViewById(android.R.id.content),
@@ -84,17 +79,21 @@ class CameraFragment : Fragment() {
                 ).show()
             }
         }
-        return binding.root
+
+        return binding?.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        outputDirectory = getOutputDirectory()
+
         requestCameraPermission()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        cameraExecutor.shutdown()
+    override fun onDestroyView() {
+        binding = null
+        super.onDestroyView()
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
@@ -131,6 +130,63 @@ class CameraFragment : Fragment() {
         }
     }
 
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
+
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+
+            val aspectRatio = AspectRatio.RATIO_4_3
+
+            val resolution = Size(512, 512)
+
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+            val preview = Preview.Builder()
+                .setTargetAspectRatio(aspectRatio)
+                .build()
+
+            imageCapture = ImageCapture.Builder()
+                .setTargetResolution(resolution)
+                .build()
+
+            cameraProvider.unbindAll()
+
+            try {
+                val camera = cameraProvider.bindToLifecycle(
+                    this, cameraSelector, preview, imageCapture
+                )
+                val previewView = binding!!.previewView
+
+                preview.setSurfaceProvider(previewView.surfaceProvider)
+                previewView.setOnTouchListener(createPinchToZoomListener(camera))
+            } catch (_: Exception) {
+            }
+
+        }, ContextCompat.getMainExecutor(requireContext()))
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun createPinchToZoomListener(camera: Camera): View.OnTouchListener {
+        val listener = object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val currentZoomRatio: Float = camera.cameraInfo.zoomState.value?.zoomRatio ?: 1f
+
+                val delta = detector.scaleFactor
+
+                camera.cameraControl.setZoomRatio(currentZoomRatio * delta)
+                return true
+            }
+        }
+
+        val scaleGestureDetector = ScaleGestureDetector(requireContext(), listener)
+
+        return View.OnTouchListener { _, event ->
+            scaleGestureDetector.onTouchEvent(event)
+            true
+        }
+    }
+
     private fun takePhoto() {
         val imageCapture = imageCapture ?: return
 
@@ -145,39 +201,10 @@ class CameraFragment : Fragment() {
                 override fun onError(exc: ImageCaptureException) {}
 
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    findNavController().navigate(
-                        CameraFragmentDirections.actionCameraFragmentToResultFragment(
-                            Uri.fromFile(photoFile)
-                        )
-                    )
+                    val savedUri = output.savedUri ?: Uri.fromFile(photoFile)
+                    goToResults(savedUri)
                 }
             })
-    }
-
-    private fun startCamera(provider: Preview.SurfaceProvider) {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
-
-        cameraProviderFuture.addListener({
-            val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-
-            val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(provider)
-            }
-
-            imageCapture = ImageCapture.Builder().build()
-
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-            try {
-                cameraProvider.unbindAll()
-
-                cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, imageCapture
-                )
-            } catch (exc: Exception) {
-            }
-
-        }, ContextCompat.getMainExecutor(requireContext()))
     }
 
     private fun getOutputDirectory(): File {
@@ -186,5 +213,11 @@ class CameraFragment : Fragment() {
         }
         return if (mediaDir != null && mediaDir.exists())
             mediaDir else requireActivity().filesDir
+    }
+
+    private fun goToResults(imageUri: Uri) {
+        findNavController().navigate(
+            CameraFragmentDirections.actionCameraFragmentToResultFragment(imageUri)
+        )
     }
 }
